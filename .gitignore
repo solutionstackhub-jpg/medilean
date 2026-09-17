@@ -1,0 +1,27 @@
+# dependencies
+node_modules
+
+# build output
+.next
+out
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets and local state
+.env
+.env*.local
+.uploads
+
+# generated at build time from prisma/schema.prisma
+src/generated
+
+# editor and AI tooling that other people's setups inject
+.agents
+.windsurf
+.claude
+skills-lock.json
+AGENTS.md
+CLAUDE.md
+
+# os
+.DS_Store

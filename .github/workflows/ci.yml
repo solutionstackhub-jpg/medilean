@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: medilean
+          POSTGRES_PASSWORD: medilean_dev_pw
+          POSTGRES_DB: medilean_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U medilean"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://medilean:medilean_dev_pw@localhost:5432/medilean_test?schema=public
+      # Test-only values. Real secrets live in the client's own secret store.
+      PHI_ENC_KEY: dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nLXh4eHg=
+      SESSION_SECRET: test-only-session-secret
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npx prisma generate
+
+      - name: Types
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm run test
+      - name: Build
+        run: npm run build

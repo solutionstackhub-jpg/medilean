@@ -1,0 +1,492 @@
+// MediLean — telemedicine weight-management platform
+// Data model notes:
+//  - Anything that is PHI is stored in a *Enc column, encrypted at the application
+//    layer (AES-256-GCM) before it reaches Postgres. See src/lib/crypto.ts.
+//  - AuditLog is append-only by convention and by database grant in production.
+//  - Clinical branching and flag rules live in the database as configuration,
+//    not in code, so the physician can change them without a deploy.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- identity
+
+enum Role {
+  PATIENT
+  PHYSICIAN
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id              String     @id @default(cuid())
+  email           String     @unique
+  passwordHash    String
+  role            Role       @default(PATIENT)
+  status          UserStatus @default(PENDING_VERIFICATION)
+  fullName        String
+  emailVerifiedAt DateTime?
+  phoneEnc        String? // PHI
+  phoneVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  patientProfile PatientProfile?
+  submissions    Submission[]    @relation("PatientSubmissions")
+  clinicalNotes  ClinicalNote[]  @relation("PhysicianNotes")
+  documents      Document[]
+  weightEntries  WeightEntry[]
+  subscription   Subscription?
+  verifications  VerificationToken[]
+  notifications  Notification[]
+  sentMessages   Message[]       @relation("MessageSender")
+  threadsAsPatient  Thread[]     @relation("ThreadPatient")
+  followUps      FollowUpSchedule[]
+  treatmentPlan  TreatmentPlan?  @relation("PatientPlan")
+  invoices       Invoice[]       @relation("PatientInvoices")
+  auditEvents    AuditLog[]      @relation("AuditActor")
+
+  @@index([role, status])
+}
+
+enum VerificationKind {
+  EMAIL
+  PHONE
+}
+
+model VerificationToken {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       VerificationKind
+  codeHash   String
+  /// Only populated when there is no mail transport, so a local run or a demo
+  /// can read the code back. Null in production.
+  plainForDev String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime         @default(now())
+
+  @@index([userId, kind])
+}
+
+// ------------------------------------------------------- patient + eligibility
+
+enum Sex {
+  FEMALE
+  MALE
+  OTHER
+  UNDISCLOSED
+}
+
+model PatientProfile {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dobEnc          String? // PHI
+  sex             Sex?
+  heightInches    Int?
+  stateCode       String? // drives location eligibility
+  addressEnc      String? // PHI
+  startingWeightLb Float?
+  goalWeightLb    Float?
+  programStartedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([stateCode])
+}
+
+/// Which US states the practice can currently accept patients from.
+/// Configuration, not code — an admin toggles a row instead of shipping a release.
+model EligibleState {
+  code      String   @id // e.g. "CA"
+  name      String
+  active    Boolean  @default(true)
+  note      String?
+  updatedAt DateTime @updatedAt
+}
+
+// ------------------------------------------------- questionnaires + branching
+
+enum QuestionnaireType {
+  INTAKE
+  FOLLOW_UP
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  NUMBER
+  TEXT
+  BOOLEAN
+}
+
+model Questionnaire {
+  id        String            @id @default(cuid())
+  key       String
+  version   Int               @default(1)
+  title     String
+  subtitle  String?
+  type      QuestionnaireType
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now())
+
+  questions   Question[]
+  submissions Submission[]
+  followUps   FollowUpSchedule[]
+
+  @@unique([key, version])
+}
+
+model Question {
+  id              String        @id @default(cuid())
+  questionnaireId String
+  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  key             String
+  label           String
+  helpText        String?
+  type            QuestionType
+  required        Boolean       @default(false)
+  /// Choice options: [{ value, label }]
+  options         Json?
+  /// Branching rule. Null means always shown. Shape:
+  /// { "all": [ { "question": "cond_list", "op": "includes", "value": "diabetes_t2" } ] }
+  showIf          Json?
+  order           Int
+
+  @@unique([questionnaireId, key])
+  @@index([questionnaireId, order])
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  NEEDS_INFO
+  APPROVED
+  DECLINED
+}
+
+model Submission {
+  id              String           @id @default(cuid())
+  patientId       String
+  patient         User             @relation("PatientSubmissions", fields: [patientId], references: [id], onDelete: Cascade)
+  questionnaireId String
+  questionnaire   Questionnaire    @relation(fields: [questionnaireId], references: [id])
+  status          SubmissionStatus @default(DRAFT)
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewedById    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  answers Answer[]
+  flags   RaisedFlag[]
+  notes   ClinicalNote[]
+
+  @@index([status, submittedAt])
+  @@index([patientId])
+}
+
+model Answer {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionKey  String
+  /// Encrypted JSON payload — a clinical answer is PHI.
+  valueEnc     String
+
+  @@unique([submissionId, questionKey])
+}
+
+// ------------------------------------------------------ configurable flagging
+
+enum FlagSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// A clinical flag rule, authored by the physician through the admin screen.
+/// The application evaluates it; it never decides what the rule should be.
+model FlagRule {
+  id        String       @id @default(cuid())
+  key       String       @unique
+  label     String
+  severity  FlagSeverity @default(MEDIUM)
+  /// Condition tree, same grammar as Question.showIf.
+  condition Json
+  /// Shown to the reviewing physician when the flag fires.
+  guidance  String?
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  raised RaisedFlag[]
+}
+
+model RaisedFlag {
+  id           String       @id @default(cuid())
+  submissionId String
+  submission   Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  ruleId       String
+  rule         FlagRule     @relation(fields: [ruleId], references: [id])
+  severity     FlagSeverity
+  raisedAt     DateTime     @default(now())
+  resolvedAt   DateTime?
+  resolvedById String?
+
+  @@unique([submissionId, ruleId])
+  @@index([resolvedAt])
+}
+
+model ClinicalNote {
+  id           String     @id @default(cuid())
+  submissionId String?
+  submission   Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  patientId    String
+  physicianId  String
+  physician    User       @relation("PhysicianNotes", fields: [physicianId], references: [id])
+  /// Encrypted — clinical documentation is PHI.
+  bodyEnc      String
+  createdAt    DateTime   @default(now())
+
+  @@index([patientId, createdAt])
+}
+
+// --------------------------------------------------------- secure messaging
+
+model Thread {
+  id            String    @id @default(cuid())
+  patientId     String
+  patient       User      @relation("ThreadPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  subject       String    @default("Care team")
+  lastMessageAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  messages Message[]
+
+  @@index([patientId, lastMessageAt])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  threadId  String
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
+  /// Encrypted — message bodies are PHI and never leave the platform.
+  bodyEnc   String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+/// Outbound notification record. Deliberately carries no clinical content:
+/// the patient is told only that something is waiting for them.
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel
+  /// A template key such as "new_message" — never the message itself.
+  templateKey String
+  deliveredAt DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------- documents
+
+enum DocumentKind {
+  LAB_RESULT
+  ID_DOCUMENT
+  PROGRESS_PHOTO
+  OTHER
+}
+
+model Document {
+  id          String       @id @default(cuid())
+  patientId   String
+  patient     User         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  kind        DocumentKind @default(OTHER)
+  /// Original filename, encrypted: filenames leak diagnoses more often than people expect.
+  filenameEnc String
+  mimeType    String
+  sizeBytes   Int
+  /// Opaque object key. Files are served only through short-lived signed URLs.
+  storageKey  String       @unique
+  /// Progress photographs are private to the patient unless shared with the care team.
+  sharedWithCareTeam Boolean @default(true)
+  uploadedAt  DateTime     @default(now())
+
+  @@index([patientId, uploadedAt])
+}
+
+/// Encrypted file bytes, for deployments with no writable disk.
+///
+/// Serverless platforms give you a read-only filesystem, so the local driver
+/// cannot be used there. Postgres can hold a 10MB ciphertext perfectly well at
+/// this scale, and it keeps the demo working end to end. A production practice
+/// with real volume moves to S3 by implementing the same interface — see
+/// src/lib/storage.ts.
+model DocumentBlob {
+  storageKey String   @id
+  data       Bytes
+  createdAt  DateTime @default(now())
+}
+
+// ------------------------------------------------------- progress + follow-up
+
+model WeightEntry {
+  id         String   @id @default(cuid())
+  patientId  String
+  patient    User     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  weightLb   Float
+  recordedAt DateTime @default(now())
+  source     String   @default("patient")
+
+  @@index([patientId, recordedAt])
+}
+
+model FollowUpSchedule {
+  id              String        @id @default(cuid())
+  patientId       String
+  patient         User          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  questionnaireId String
+  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id])
+  intervalDays    Int           @default(30)
+  nextDueAt       DateTime
+  lastCompletedAt DateTime?
+  active          Boolean       @default(true)
+
+  @@index([nextDueAt, active])
+}
+
+// ---------------------------------------------------------- treatment plan
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+/// What the physician decided. Written only by a clinician, never by a rule.
+model TreatmentPlan {
+  id            String     @id @default(cuid())
+  patientId     String     @unique
+  patient       User       @relation("PatientPlan", fields: [patientId], references: [id], onDelete: Cascade)
+  prescribedById String?
+  /// e.g. "Semaglutide". Clinical content, so encrypted like everything else.
+  medicationEnc String?
+  /// e.g. "0.25 mg"
+  doseEnc       String?
+  /// e.g. "Weekly injections"
+  scheduleEnc   String?
+  status        PlanStatus @default(DRAFT)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  updatedAt     DateTime   @updatedAt
+}
+
+// ------------------------------------------------------------------ billing
+
+enum SubscriptionStatus {
+  NONE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+/// No card data is stored here, only references issued by Stripe.
+/// PHI is never sent to Stripe — not in metadata, product names or descriptions.
+model Subscription {
+  id                   String             @id @default(cuid())
+  patientId            String             @unique
+  patient              User               @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  planName             String             @default("Weight Management Program")
+  priceCents           Int                @default(29900)
+  status               SubscriptionStatus @default(NONE)
+  currentPeriodEnd     DateTime?
+  cardBrand            String?
+  cardLast4            String?
+  cardExpMonth         Int?
+  cardExpYear          Int?
+  updatedAt            DateTime           @updatedAt
+}
+
+/// A billing document. Amounts only; nothing clinical ever appears on an invoice,
+/// which is why the line description is a fixed plan name and not a diagnosis.
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+model Invoice {
+  id           String        @id @default(cuid())
+  patientId    String
+  patient      User          @relation("PatientInvoices", fields: [patientId], references: [id], onDelete: Cascade)
+  number       String        @unique
+  description  String        @default("Weight Management Program")
+  amountCents  Int
+  status       InvoiceStatus @default(OPEN)
+  periodStart  DateTime
+  periodEnd    DateTime
+  issuedAt     DateTime      @default(now())
+  paidAt       DateTime?
+  stripeInvoiceId String?
+
+  @@index([patientId, issuedAt])
+}
+
+// ---------------------------------------------------------------- audit log
+
+/// Append-only. Records reads as well as writes: after an incident the question
+/// is always who *looked* at a chart, not who edited one.
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorRole Role?
+  action    String // e.g. "submission.view"
+  entity    String // e.g. "Submission"
+  entityId  String?
+  /// Denormalised so "everyone who touched this patient" is one index scan.
+  patientId String?
+  ip        String?
+  userAgent String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([patientId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}

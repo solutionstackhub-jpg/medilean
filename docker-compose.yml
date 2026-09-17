@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: medilean-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: medilean
+      POSTGRES_PASSWORD: medilean_dev_pw
+      POSTGRES_DB: medilean
+    ports:
+      - "5544:5432"
+    volumes:
+      - medilean_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medilean -d medilean"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  medilean_pgdata:

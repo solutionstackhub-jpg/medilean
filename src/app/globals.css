@@ -1,0 +1,526 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   MediLean design tokens.
+
+   Every colour below is lifted verbatim from medilean_pixelmatch_single.html.
+   The showcase packed nine screens onto one 1536px board, so its inner type ran
+   at 8–10px. As real full-width pages that is unreadable, so type is scaled up
+   while keeping the original ratios, spacing, borders and radii intact.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --color-bg: #07131a;
+  --color-panel: #091820;
+  --color-panel-2: #0c1d26;
+  --color-panel-3: #08161e;
+  --color-line: #18313b;
+  --color-line-soft: #142c35;
+  --color-line-strong: #29414a;
+  --color-muted: #94a7ae;
+  --color-muted-2: #8fa2aa;
+  --color-ink: #f4f7f8;
+  --color-ink-2: #c5d0d4;
+  --color-brand: #58edb5;
+  --color-brand-2: #28c994;
+  --color-brand-deep: #042016;
+  --color-danger: #ff625c;
+  --color-warning: #e3b655;
+  --color-field: #0b1c25;
+  --color-field-line: #213a44;
+
+  --font-sans: Inter, ui-sans-serif, system-ui, Arial, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------- primitives */
+
+.ml-shell {
+  width: min(100%, 1536px);
+  margin: auto;
+  background: radial-gradient(circle at 50% 0, #10242d 0, #07131a 35%);
+}
+
+.ml-card {
+  border: 1px solid var(--color-line-soft);
+  border-radius: 7px;
+  background: var(--color-panel-3);
+  overflow: hidden;
+}
+
+.ml-card-title {
+  padding: 11px 14px;
+  font-weight: 700;
+  font-size: 14px;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.ml-panel {
+  background: var(--color-panel-2);
+  border: 1px solid var(--color-line);
+  border-radius: 7px;
+}
+
+.ml-btn {
+  border: 1px solid var(--color-line-strong);
+  background: #0d2029;
+  color: #fff;
+  border-radius: 9px;
+  padding: 12px 24px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ml-btn:hover:not(:disabled) {
+  border-color: #3d5a64;
+  background: #10262f;
+}
+.ml-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ml-btn-primary {
+  background: linear-gradient(135deg, #5df0b7, #38dba3);
+  border: 0;
+  color: var(--color-brand-deep);
+  font-weight: 800;
+}
+.ml-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6df5c1, #45e3ad);
+}
+
+.ml-btn-ghost {
+  border: 0;
+  background: transparent;
+}
+
+.ml-btn-review {
+  border: 1px solid #38a981;
+  color: #65eaba;
+  background: transparent;
+  border-radius: 5px;
+  font-size: 12px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.ml-btn-review:hover {
+  background: #11392e;
+}
+
+/* ----------------------------------------------------------------- fields */
+
+.ml-field {
+  margin-top: 16px;
+}
+.ml-field label {
+  font-size: 12px;
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-ink-2);
+}
+
+.ml-input {
+  height: 42px;
+  width: 100%;
+  border: 1px solid var(--color-field-line);
+  border-radius: 5px;
+  background: var(--color-field);
+  color: #dce5e7;
+  padding: 0 12px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.ml-input:focus {
+  outline: none;
+  border-color: #34bd90;
+}
+.ml-input::placeholder {
+  color: #5f757e;
+}
+
+textarea.ml-input {
+  height: auto;
+  padding: 10px 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+select.ml-input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #7d929a 50%),
+    linear-gradient(135deg, #7d929a 50%, transparent 50%);
+  background-position: calc(100% - 18px) 18px, calc(100% - 13px) 18px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* --------------------------------------------------------------- stepper */
+
+.ml-steps {
+  list-style: none;
+  margin: 0;
+  background: var(--color-field);
+  border: 1px solid #17313b;
+  border-radius: 10px;
+  padding: 16px 10px 13px;
+  display: flex;
+  position: relative;
+}
+
+/* The rail sits behind the markers and stops half a cell in at each end, so it
+   never pokes out past the first and last circle at any width. */
+.ml-steps::before {
+  content: "";
+  position: absolute;
+  left: calc(10% + 10px);
+  right: calc(10% + 10px);
+  top: 29px;
+  height: 1px;
+  background: #2b424b;
+}
+
+.ml-step {
+  flex: 1;
+  text-align: center;
+  z-index: 1;
+  min-width: 0;
+}
+
+.ml-step-hit {
+  display: block;
+  color: #82969e;
+  font-size: 12px;
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 8px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.ml-step-hit > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ml-step i {
+  display: grid;
+  place-items: center;
+  margin: 0 auto 7px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  border: 1px solid #52676f;
+  background: var(--color-field);
+  font-style: normal;
+  font-size: 12px;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.ml-step.is-on .ml-step-hit {
+  color: #5debb5;
+  font-weight: 600;
+}
+.ml-step.is-on i {
+  background: #59eeb6;
+  color: #082118;
+  border-color: #59eeb6;
+}
+
+.ml-step.is-done .ml-step-hit {
+  color: #9fb3ba;
+}
+.ml-step.is-done i {
+  border-color: #34bd90;
+  color: #5debb5;
+}
+
+/* Only steps you can actually open look clickable. */
+.ml-step.is-link .ml-step-hit {
+  cursor: pointer;
+}
+.ml-step.is-link .ml-step-hit:hover {
+  color: #eaf4f2;
+  background: #102a32;
+}
+.ml-step.is-link .ml-step-hit:hover i {
+  border-color: #58edb5;
+}
+.ml-step-hit:focus-visible {
+  outline: 2px solid #58edb5;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .ml-steps {
+    padding: 14px 6px 11px;
+  }
+  .ml-step-hit {
+    font-size: 10px;
+  }
+  .ml-step i {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+  .ml-steps::before {
+    top: 27px;
+  }
+}
+
+/* -------------------------------------------------------------- checklist */
+
+.ml-check {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  margin: 10px 0;
+  font-size: 14px;
+  color: #c9d4d7;
+  cursor: pointer;
+  user-select: none;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+.ml-check:hover {
+  background: #0b1c25;
+}
+.ml-check .ml-box {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #667980;
+  border-radius: 3px;
+  flex: none;
+}
+.ml-check.is-on {
+  border-color: #1f5a47;
+  background: #0b2019;
+}
+.ml-check.is-on .ml-box {
+  background: #56eab3;
+  border-color: #56eab3;
+  box-shadow: inset 0 0 0 4px #0c1f26;
+}
+.ml-check .ml-radio {
+  border-radius: 50%;
+}
+
+/* ------------------------------------------------------------------ misc */
+
+.ml-progressline {
+  height: 5px;
+  background: var(--color-line);
+  border-radius: 3px;
+  margin: 20px 0;
+  overflow: hidden;
+}
+.ml-progressline > b {
+  display: block;
+  height: 100%;
+  background: #5ceeb6;
+  border-radius: 3px;
+  transition: width 0.25s ease;
+}
+
+.ml-pill {
+  border-radius: 4px;
+  padding: 5px 9px;
+  background: #11392e;
+  color: #5debb5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ml-pill.is-red {
+  background: #3a1e22;
+  color: #ff736d;
+}
+.ml-pill.is-yellow {
+  background: #392f1c;
+  color: #f1c565;
+}
+.ml-pill.is-grey {
+  background: #16262e;
+  color: #9db0b7;
+}
+
+.ml-circle {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #34bd90;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--color-brand);
+  flex: none;
+}
+
+.ml-sub {
+  color: var(--color-muted-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ml-tabs {
+  display: flex;
+  gap: 24px;
+  font-size: 13px;
+  margin: 18px 0 10px;
+  border-bottom: 1px solid var(--color-line);
+}
+.ml-tab {
+  padding-bottom: 8px;
+  color: var(--color-muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  font-size: 13px;
+  font-family: inherit;
+}
+.ml-tab.is-on {
+  color: #5debb5;
+  border-bottom: 2px solid #5debb5;
+}
+
+.ml-menu {
+  font-size: 13px;
+  padding: 11px 12px;
+  border-radius: 6px;
+  color: #a1b1b7;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+}
+.ml-menu:hover {
+  background: #0f2028;
+}
+.ml-menu.is-on {
+  background: #123229;
+  color: #5cebb4;
+}
+
+.ml-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ml-table th {
+  text-align: left;
+  color: var(--color-muted-2);
+  padding: 11px 10px;
+  font-weight: 500;
+  font-size: 12px;
+}
+.ml-table td {
+  padding: 13px 10px;
+  border-top: 1px solid var(--color-line);
+}
+.ml-table tbody tr:hover {
+  background: #0b1c25;
+}
+
+.ml-kpi {
+  background: var(--color-panel-2);
+  border: 1px solid #17313b;
+  border-radius: 7px;
+  padding: 16px;
+}
+.ml-kpi small {
+  font-size: 12px;
+  color: #a0b0b6;
+}
+.ml-kpi strong {
+  display: block;
+  font-size: 26px;
+  margin: 7px 0;
+  font-weight: 700;
+}
+
+.ml-bubble {
+  max-width: 82%;
+  background: #172a34;
+  padding: 12px 14px;
+  border-radius: 7px;
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 12px 0;
+  width: fit-content;
+}
+.ml-bubble.is-me {
+  margin-left: auto;
+  background: #124236;
+}
+
+.ml-upload {
+  min-height: 150px;
+  border: 1px dashed #42b58d;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-size: 14px;
+  padding: 20px;
+  cursor: pointer;
+}
+.ml-upload:hover,
+.ml-upload.is-drag {
+  background: #0b2019;
+}
+
+.ml-file {
+  min-height: 52px;
+  border-bottom: 1px solid #17313b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.ml-green {
+  color: var(--color-brand);
+}
+.ml-danger {
+  color: var(--color-danger);
+}
+
+.ml-notes {
+  font-size: 12px;
+  line-height: 1.9;
+  color: #9db0b7;
+  margin: 12px 0;
+}
+
+/* Scrollbars, so dark panels do not get a bright native bar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #24404b transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #24404b;
+  border-radius: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
