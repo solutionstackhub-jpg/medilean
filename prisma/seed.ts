@@ -9,7 +9,7 @@ import { evaluate, type Condition } from '../src/lib/rules'
 import { newStorageKey, putObject } from '../src/lib/storage'
 import { PATIENTS, EXTRA_MESSAGES } from './seed-data'
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+const adapter = new PrismaPg({ connectionString: ['DATABASE_URL','POSTGRES_URL','STORAGE_URL','POSTGRES_PRISMA_URL','DATABASE_POSTGRES_URL','NEON_DATABASE_URL','DATABASE_URL_UNPOOLED','POSTGRES_URL_NON_POOLING'].map((n) => process.env[n]).find((v) => v?.startsWith('postgres')) })
 const prisma = new PrismaClient({ adapter })
 
 const DEMO_PASSWORD = 'Password123'

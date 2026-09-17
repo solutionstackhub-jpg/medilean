@@ -31,11 +31,23 @@ console.log(`\n▸ prebuild (${WHERE})`)
 
 // ------------------------------------------------------------------ checks
 
+// A hosted database may arrive under any of these, depending on how it was
+// attached. Vercel's integration names the variable after a prefix you choose,
+// and it rejects some prefixes, so insisting on DATABASE_URL turns a naming
+// quirk into a failed deploy. See src/lib/database-url.ts.
+const DB_VARS = [
+  'DATABASE_URL', 'POSTGRES_URL', 'STORAGE_URL', 'POSTGRES_PRISMA_URL',
+  'DATABASE_POSTGRES_URL', 'NEON_DATABASE_URL',
+  'DATABASE_URL_UNPOOLED', 'POSTGRES_URL_NON_POOLING',
+]
+const dbVar = DB_VARS.find((n) => process.env[n]?.startsWith('postgres'))
+
 const REQUIRED = [
   {
     name: 'DATABASE_URL',
     what: 'PostgreSQL connection string',
-    how: 'Create a database at neon.tech or supabase.com and paste the connection string. It should end with ?sslmode=require',
+    how: `Attach a database in Vercel (Storage tab), or create one at neon.tech and paste the connection string. Any of these names works: ${DB_VARS.join(', ')}`,
+    present: () => Boolean(dbVar),
   },
   {
     name: 'PHI_ENC_KEY',
@@ -56,6 +68,10 @@ const REQUIRED = [
 
 const problems = []
 for (const item of REQUIRED) {
+  if (item.present) {
+    if (!item.present()) problems.push({ ...item, why: 'no Postgres connection string found' })
+    continue
+  }
   const value = process.env[item.name]
   if (!value) {
     problems.push({ ...item, why: 'is not set' })
@@ -100,7 +116,14 @@ if (problems.length) {
   console.log('  environment is incomplete, which is fine for a local build:')
   for (const p of problems) console.log(`    ${p.name} — ${p.why}`)
 } else {
-  console.log('  environment looks right')
+  console.log(`  environment looks right (database from ${dbVar})`)
+}
+
+// Prisma's CLI reads DATABASE_URL. If the host called it something else, map it
+// across so migrations run without anyone having to rename anything.
+if (dbVar && dbVar !== 'DATABASE_URL') {
+  process.env.DATABASE_URL = process.env[dbVar]
+  console.log(`  mapped ${dbVar} to DATABASE_URL for the migration step`)
 }
 for (const a of advisories) console.log(`  note: ${a}`)
 
