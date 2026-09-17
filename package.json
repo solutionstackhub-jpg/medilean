@@ -20,7 +20,8 @@
     "postinstall": "prisma generate",
     "vercel-build": "node scripts/preflight.mjs && prisma migrate deploy && prisma generate && next build",
     "redeploy": "bash scripts/redeploy.sh",
-    "preflight": "node scripts/preflight.mjs"
+    "preflight": "node scripts/preflight.mjs",
+    "deploy": "bash scripts/deploy-vercel.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
