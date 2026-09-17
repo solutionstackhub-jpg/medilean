@@ -25,11 +25,16 @@ Copy the connection string. It should end with `?sslmode=require`.
 In Vercel: **Add New → Project → Import Git Repository**, pick this repo.
 
 Framework preset is detected as Next.js. Leave the build settings alone — the
-repo ships a `vercel-build` script that runs migrations before building:
+repo ships a `vercel-build` script:
 
 ```
-prisma migrate deploy && prisma generate && next build
+node scripts/preflight.mjs && prisma migrate deploy && prisma generate && next build
 ```
+
+**Set the environment variables in the next section before you deploy.** If any
+are missing the build stops immediately and prints exactly which ones and where
+to put them, rather than failing later with a Prisma error about
+`datasource.url` that does not tell you what to do.
 
 ---
 
@@ -59,6 +64,15 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))" #
 | `SHOW_VERIFICATION_CODE` | `true` | Shows the email code on screen and enables the one-click demo sign-in. **Only for a demo** — it lets anyone sign in as the seeded accounts |
 | `STRIPE_SECRET_KEY` etc. | — | Leave unset and billing runs in simulation, which is what you want for a demo |
 
+### Preview deployments share the database
+
+Vercel builds every branch, and the build runs `prisma migrate deploy`. If
+Preview and Production use the same `DATABASE_URL`, a preview build migrates
+your production database.
+
+For a demo that is usually fine. If it is not, give Preview its own
+`DATABASE_URL` in Vercel — environment variables can be scoped per environment.
+
 ### Do not set
 
 `COOKIE_SECURE` — Vercel serves over HTTPS, so leave it unset and the cookie is
@@ -86,7 +100,23 @@ wrong for anything else.
 
 ---
 
-## 5. Check it
+## 5. If the build fails
+
+The preflight step names the problem in the first few lines of the log. The
+common ones:
+
+| Log says | Fix |
+| --- | --- |
+| `DATABASE_URL — is not set` | Add it under Settings → Environment Variables, then Redeploy |
+| `PHI_ENC_KEY — decodes to N bytes` | It must be exactly 32 bytes before base64. Regenerate with the command in the log |
+| `datasource.url property is required` | An older build without the preflight. Pull `main` and redeploy |
+| Build succeeds, uploads fail at runtime | `STORAGE_DRIVER` is not `db` |
+| Build succeeds, sign-in loops back to login | Check `SESSION_SECRET` is set, and that `COOKIE_SECURE` is **not** set to `false` |
+
+Changing an environment variable does not rebuild on its own. Use
+**Deployments → ⋯ → Redeploy** afterwards.
+
+## 6. Check it
 
 - `/` loads, the nav scrolls, sign-in works
 - One-click sign-in as the physician shows a queue with flagged cases
