@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/prebuild.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -18,9 +18,8 @@
     "db:reset": "prisma migrate reset --force && npm run db:seed",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
     "postinstall": "prisma generate",
-    "vercel-build": "node scripts/preflight.mjs && prisma migrate deploy && prisma generate && next build",
+    "vercel-build": "npm run build",
     "redeploy": "bash scripts/redeploy.sh",
-    "preflight": "node scripts/preflight.mjs",
     "deploy": "bash scripts/deploy-vercel.sh"
   },
   "dependencies": {
